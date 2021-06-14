@@ -45,7 +45,7 @@ class StableNetTrainer(nn.Module):
         self.model = self.model.to(device)
 
     def prepare_optims(self, w):
-        self.w_optim = SGD([w], lr=1e-2, weight_decay=1e-4)
+        self.w_optim = SGD([w], lr=1e-2)
         self.d_optim = Adam(self.model.parameters(), lr=2e-4, betas=(0.5, 0.99))
 
     @torch.no_grad()
@@ -86,8 +86,8 @@ class StableNetTrainer(nn.Module):
                     for i in range(repeat_num):
                         z_o, w_o = self.replay.reload(z_l.detach(), w_l)
                         sample_loss = cross_covariance_loss(fourier_mapping(z_o), w_o)
-                        #print(w_l)
-                        sample_loss += (1 - torch.mean(w_o)) ** 2
+
+                        sample_loss += len(self.w) * F.relu(1 - torch.mean(self.w))
                         if i != repeat_num - 1:
                             sample_loss.backward(retain_graph=True)
                         else:
@@ -105,10 +105,10 @@ class StableNetTrainer(nn.Module):
                 acc += (pred_l.argmax(dim=1) == label).sum().item()
                 count += len(img)
                 if len(self.replay.buffer_z) >= self.k:
-                    train_bar.set_description(f"acc: {(acc / count):.2f} sample_loss: {sample_loss.item():.2f} ce_loss: {ce_loss.item():.2f}")
+                    train_bar.set_description(f"[{epoch}/{epochs}] acc: {(acc / count):.2f} sample_loss: {sample_loss.item():.2f} ce_loss: {ce_loss.item():.2f}")
                 else:
                     train_bar.set_description(
-                        f"acc: {(acc / count):.2f} ce_loss: {ce_loss.item():.2f}")
+                        f"[{epoch}/{epochs}] acc: {(acc / count):.2f} ce_loss: {ce_loss.item():.2f}")
 
                 self.replay.update(z_l, w_l)
 
