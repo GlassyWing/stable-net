@@ -1,1 +1,1 @@
-from .image_folder import ImageFolderWithIdx
+from .image_folder import ImageFolderWithIdx, ImageLabelWithIdx

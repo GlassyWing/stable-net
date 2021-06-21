@@ -64,8 +64,10 @@ class StableNetTrainer(nn.Module):
             count += len(img)
 
             eval_bar.set_description(f"acc: {(acc / count):.2f}")
+        return acc / count
 
     def fit(self, train_loader, test_loader=None, epochs=5, repeat_num=8, save_path=None):
+        best_acc = 0.
         for epoch in range(epochs):
             train_bar = tqdm(train_loader)
             self.model.train()
@@ -87,7 +89,7 @@ class StableNetTrainer(nn.Module):
                         z_o, w_o = self.replay.reload(z_l.detach(), w_l)
                         sample_loss = cross_covariance_loss(fourier_mapping(z_o), w_o)
 
-                        sample_loss += len(self.w) * F.relu(1 - torch.mean(self.w))
+                        sample_loss = sample_loss + len(self.w) * F.relu(1 - torch.mean(self.w))
                         if i != repeat_num - 1:
                             sample_loss.backward(retain_graph=True)
                         else:
@@ -105,18 +107,27 @@ class StableNetTrainer(nn.Module):
                 acc += (pred_l.argmax(dim=1) == label).sum().item()
                 count += len(img)
                 if len(self.replay.buffer_z) >= self.k:
-                    train_bar.set_description(f"[{epoch}/{epochs}] acc: {(acc / count):.2f} sample_loss: {sample_loss.item():.2f} ce_loss: {ce_loss.item():.2f}")
+                    train_bar.set_description(f"[{epoch}/{epochs}] acc: {(acc / count):.2f} "
+                                              f"sample_loss: {sample_loss.item():.2f} "
+                                              f"mean_of_weighs: {torch.mean(w_l).item():.2f} "
+                                              f"ce_loss: {ce_loss.item():.2f}")
                 else:
                     train_bar.set_description(
                         f"[{epoch}/{epochs}] acc: {(acc / count):.2f} ce_loss: {ce_loss.item():.2f}")
 
                 self.replay.update(z_l, w_l)
 
-            if save_path is not None:
-                torch.save({
-                    "model": self.model.state_dict(),
-                    "weight": self.w
-                }, save_path)
+            # if save_path is not None:
+            #     torch.save({
+            #         "model": self.model.state_dict(),
+            #         "weight": self.w
+            #     }, save_path)
 
             if test_loader is not None:
-                self.evaluate(test_loader)
+               eval_acc = self.evaluate(test_loader)
+               if save_path is not None and eval_acc > best_acc:
+                   best_acc = eval_acc
+                   torch.save({
+                       "model": self.model.state_dict(),
+                       "weight": self.w
+                   }, save_path)
