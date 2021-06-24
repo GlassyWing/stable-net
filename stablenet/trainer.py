@@ -95,9 +95,9 @@ class StableNetTrainer(nn.Module):
                         # else:
                         sample_loss.backward()
                         self.w_optim.step()
+                        with torch.no_grad():
+                            self.w.data[index] = torch.softmax(self.w[index], dim=0) * len(w_l)
 
-                    with torch.no_grad():
-                        self.w.data[index] = torch.softmax(w_l, dim=0) * len(w_l)
 
                 # update base model
                 self.d_optim.zero_grad()
