@@ -1,10 +1,10 @@
 import torch
 from torch import nn
-from torch.optim import Adam, SGD
+from torch.optim import Adam, SGD, AdamW
 from tqdm import tqdm
 import torch.nn.functional as F
 
-from .losses import cross_covariance_loss
+from .losses import cross_covariance_loss_v2
 from .utils import fourier_mapping
 
 
@@ -45,7 +45,7 @@ class StableNetTrainer(nn.Module):
         self.model = self.model.to(device)
 
     def prepare_optims(self, w):
-        self.w_optim = SGD([w], lr=1e-2)
+        self.w_optim = SGD([w], lr=3, weight_decay=0.01)
         self.d_optim = Adam(self.model.parameters(), lr=2e-4, betas=(0.5, 0.99))
 
     @torch.no_grad()
@@ -83,23 +83,25 @@ class StableNetTrainer(nn.Module):
                 if len(self.replay.buffer_z) >= self.k:
 
                     # update w_l
-                    self.w_optim.zero_grad()
 
                     for i in range(repeat_num):
+                        self.w_optim.zero_grad()
+                        w_l = self.w[index]
                         z_o, w_o = self.replay.reload(z_l.detach(), w_l)
-                        sample_loss = cross_covariance_loss(fourier_mapping(z_o), w_o)
+                        sample_loss = cross_covariance_loss_v2(fourier_mapping(z_o), w_o)
 
-                        sample_loss = sample_loss + len(self.w) * F.relu(1 - torch.mean(self.w))
-                        if i != repeat_num - 1:
-                            sample_loss.backward(retain_graph=True)
-                        else:
-                            sample_loss.backward()
+                        # if i != repeat_num - 1:
+                        #     sample_loss.backward(retain_graph=True)
+                        # else:
+                        sample_loss.backward()
+                        self.w_optim.step()
 
-                    self.w_optim.step()
+                    with torch.no_grad():
+                        self.w.data[index] = torch.softmax(w_l, dim=0) * len(w_l)
 
                 # update base model
                 self.d_optim.zero_grad()
-                ce_loss = F.cross_entropy(pred_l, label, reduction="none") * w_l.detach()
+                ce_loss = F.cross_entropy(pred_l, label, reduction="none") * self.w[index].detach()
                 ce_loss = ce_loss.mean()
                 ce_loss.backward()
                 self.d_optim.step()
@@ -109,7 +111,7 @@ class StableNetTrainer(nn.Module):
                 if len(self.replay.buffer_z) >= self.k:
                     train_bar.set_description(f"[{epoch}/{epochs}] acc: {(acc / count):.2f} "
                                               f"sample_loss: {sample_loss.item():.2f} "
-                                              f"mean_of_weighs: {torch.mean(w_l).item():.2f} "
+                                              f"mean_of_weighs: {torch.mean(self.w[index]).item():.2f} "
                                               f"ce_loss: {ce_loss.item():.2f}")
                 else:
                     train_bar.set_description(
@@ -117,17 +119,17 @@ class StableNetTrainer(nn.Module):
 
                 self.replay.update(z_l, w_l)
 
-            # if save_path is not None:
-            #     torch.save({
-            #         "model": self.model.state_dict(),
-            #         "weight": self.w
-            #     }, save_path)
+            if test_loader is None and save_path is not None:
+                torch.save({
+                    "model": self.model.state_dict(),
+                    "weight": self.w
+                }, save_path)
 
-            if test_loader is not None:
-               eval_acc = self.evaluate(test_loader)
-               if save_path is not None and eval_acc > best_acc:
-                   best_acc = eval_acc
-                   torch.save({
-                       "model": self.model.state_dict(),
-                       "weight": self.w
-                   }, save_path)
+            elif test_loader is not None:
+                eval_acc = self.evaluate(test_loader)
+                if save_path is not None and eval_acc > best_acc:
+                    best_acc = eval_acc
+                    torch.save({
+                        "model": self.model.state_dict(),
+                        "weight": self.w
+                    }, save_path)
