@@ -1,8 +1,8 @@
 import torch
-from torch import nn
-from torch.optim import Adam, SGD, AdamW
-from tqdm import tqdm
 import torch.nn.functional as F
+from torch import nn
+from torch.optim import Adam, SGD
+from tqdm import tqdm
 
 from .losses import cross_covariance_loss_v2
 from .utils import fourier_mapping
@@ -45,7 +45,7 @@ class StableNetTrainer(nn.Module):
         self.model = self.model.to(device)
 
     def prepare_optims(self, w):
-        self.w_optim = SGD([w], lr=3, weight_decay=0.01)
+        self.w_optim = SGD([w], lr=1e-2, weight_decay=0.01)
         self.d_optim = Adam(self.model.parameters(), lr=2e-4, betas=(0.5, 0.99))
 
     @torch.no_grad()
@@ -95,9 +95,9 @@ class StableNetTrainer(nn.Module):
                         # else:
                         sample_loss.backward()
                         self.w_optim.step()
-                        with torch.no_grad():
-                            self.w.data[index] = torch.softmax(self.w[index], dim=0) * len(w_l)
 
+                    with torch.no_grad():
+                        self.w.data[index] = torch.softmax(self.w[index] ** 2, dim=0) * len(w_l)
 
                 # update base model
                 self.d_optim.zero_grad()

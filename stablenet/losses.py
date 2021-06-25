@@ -11,20 +11,16 @@ def cross_covariance_loss_v2(x, w):
     """
     n = x.size(0)
 
-    # ((p, n) * (1, n) => (p, n)) @ (n, p) => (p, p)
-    l = x.permute(1, 0) * w.view(1, -1) @ x / n
-    # (p, n) @ (n, 1) => (p, 1)
-    r = x.permute(1, 0) @ w.view(-1, 1) / n
-    # (p, 1) @ (1, p) => (p, p)
-    r = r @ r.permute(1, 0)
+    w = w.view(-1, 1)
 
-    covariance = (l - r)
+    w = w * w  # Ensure that w >= 0
+    covariance = x.t() * w.t() @ x / n - ((x.t() @ w) / torch.sum(w)) * (w.t() @ x / n)
 
     # Remove diagonal elements
     step = 1 + (np.cumprod(x.shape[:-1])).sum()
     covariance.view(-1)[::step] = 0
 
-    return torch.norm(covariance, p='fro')
+    return torch.norm(covariance)
 
 
 def cross_covariance_loss(a, w):
