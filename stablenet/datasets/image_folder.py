@@ -23,7 +23,7 @@ class ImageLabelWithIdx(Dataset):
 
     def __getitem__(self, item):
         img_path, label = self.samples[item]
-        img = Image.open(img_path)
+        img = Image.open(img_path).convert("RGB")
         if self.transform is not None:
             img = self.transform(img)
         return img, self.class_to_idx[label], item

@@ -45,7 +45,7 @@ class StableNetTrainer(nn.Module):
         self.model = self.model.to(device)
 
     def prepare_optims(self, w):
-        self.w_optim = SGD([w], lr=1e-2, weight_decay=0.01)
+        self.w_optim = SGD([w], lr=1e-2, weight_decay=0.001)
         self.d_optim = Adam(self.model.parameters(), lr=2e-4, betas=(0.5, 0.99))
 
     @torch.no_grad()
@@ -83,18 +83,19 @@ class StableNetTrainer(nn.Module):
                 if len(self.replay.buffer_z) >= self.k:
 
                     # update w_l
-
+                    self.w_optim.zero_grad()
                     for i in range(repeat_num):
-                        self.w_optim.zero_grad()
+
                         w_l = self.w[index]
                         z_o, w_o = self.replay.reload(z_l.detach(), w_l)
                         sample_loss = cross_covariance_loss_v2(fourier_mapping(z_o), w_o)
+                        sample_loss = sample_loss + (torch.sum(w_l * w_l) - len(w_l)) ** 2
 
-                        # if i != repeat_num - 1:
-                        #     sample_loss.backward(retain_graph=True)
-                        # else:
-                        sample_loss.backward()
-                        self.w_optim.step()
+                        if i != repeat_num - 1:
+                            sample_loss.backward(retain_graph=True)
+                        else:
+                            sample_loss.backward()
+                    self.w_optim.step()
 
                     with torch.no_grad():
                         self.w.data[index] = torch.softmax(self.w[index] ** 2, dim=0) * len(w_l)
