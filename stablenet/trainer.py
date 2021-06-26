@@ -2,6 +2,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from torch.optim import Adam, SGD
+from torch.optim.adamw import AdamW
 from tqdm import tqdm
 
 from .losses import cross_covariance_loss_v2, cross_covariance_loss
@@ -22,13 +23,16 @@ class Replay:
                 torch.cat(self.buffer_w + [w], dim=0))
 
     def update(self, z, w):
+        z = z.detach()
+        w = w.detach()
+        w = torch.softmax(w, dim=0) * len(w)
         if len(self.buffer_w) < self.k:
-            self.buffer_z.append(z.detach())
-            self.buffer_w.append(w.detach())
+            self.buffer_z.append(z)
+            self.buffer_w.append(w)
 
         for i in range(len(self.buffer_z)):
-            self.buffer_z[i] = self.alpha[i] * self.buffer_z[i] + (1 - self.alpha[i]) * z.detach()
-            self.buffer_w[i] = self.alpha[i] * self.buffer_w[i] + (1 - self.alpha[i]) * w.detach()
+            self.buffer_z[i] = self.alpha[i] * self.buffer_z[i] + (1 - self.alpha[i]) * z
+            self.buffer_w[i] = self.alpha[i] * self.buffer_w[i] + (1 - self.alpha[i]) * w
 
 
 class StableNetTrainer(nn.Module):
@@ -45,8 +49,8 @@ class StableNetTrainer(nn.Module):
         self.model = self.model.to(device)
 
     def prepare_optims(self, w):
-        self.w_optim = SGD([w], lr=1e-2, weight_decay=0.001)
-        self.d_optim = Adam(self.model.parameters(), lr=2e-4, betas=(0.5, 0.99))
+        self.w_optim = AdamW([w], lr=2e-4, weight_decay=0.001, betas=(0.5, 0.99))
+        self.d_optim = AdamW(self.model.parameters(), lr=2e-4, betas=(0.5, 0.99))
 
     @torch.no_grad()
     def evaluate(self, test_loader):
