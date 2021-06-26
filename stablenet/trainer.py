@@ -4,7 +4,7 @@ from torch import nn
 from torch.optim import Adam, SGD
 from tqdm import tqdm
 
-from .losses import cross_covariance_loss_v2
+from .losses import cross_covariance_loss_v2, cross_covariance_loss
 from .utils import fourier_mapping
 
 
@@ -89,7 +89,7 @@ class StableNetTrainer(nn.Module):
                         w_l = self.w[index]
                         z_o, w_o = self.replay.reload(z_l.detach(), w_l)
                         sample_loss = cross_covariance_loss_v2(fourier_mapping(z_o), w_o)
-                        sample_loss = sample_loss + (torch.sum(w_l * w_l) - len(w_l)) ** 2
+                        sample_loss = sample_loss + len(w_l) * (torch.mean(w_l * w_l) - 1) ** 2
 
                         if i != repeat_num - 1:
                             sample_loss.backward(retain_graph=True)
@@ -97,8 +97,8 @@ class StableNetTrainer(nn.Module):
                             sample_loss.backward()
                     self.w_optim.step()
 
-                    with torch.no_grad():
-                        self.w.data[index] = torch.softmax(self.w[index] ** 2, dim=0) * len(w_l)
+                    # with torch.no_grad():
+                    #     self.w.data[index] = torch.softmax(self.w[index] ** 2, dim=0) * len(w_l)
 
                 # update base model
                 self.d_optim.zero_grad()

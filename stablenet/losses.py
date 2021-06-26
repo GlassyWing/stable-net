@@ -20,7 +20,7 @@ def cross_covariance_loss_v2(x, w):
     step = 1 + (np.cumprod(x.shape[:-1])).sum()
     covariance.view(-1)[::step] = 0
 
-    return torch.norm(covariance)
+    return torch.norm(covariance,p='fro')
 
 
 def cross_covariance_loss(a, w):
@@ -33,6 +33,7 @@ def cross_covariance_loss(a, w):
     n = a.size(0)
 
     w = w.view(-1, 1)
+    w = w * w
 
     weighted_a = w * a
     mu = torch.mean(weighted_a, dim=0, keepdim=True)  # (1, feat_dim )
