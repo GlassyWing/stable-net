@@ -11,18 +11,15 @@ import matplotlib.pyplot as plt
 
 from stablenet.models.model import StableNet
 
-
-
 if __name__ == '__main__':
     device = "cpu"
     epochs = 15
     n_cls = 101
-    checkpoint = "checkpoints/caltech.pth"
-    #checkpoint = "checkpoints/caltech_stable.pth"
+    checkpoint = "checkpoints/va_caltech_stable.pth"
 
     # Prepare dataloader
     train_transform = transforms.Compose([
-        transforms.Resize((128, 128)),
+        transforms.Resize((256, 256)),
         # transforms.Grayscale(num_output_channels=3),
         transforms.ToTensor()
     ])
@@ -40,7 +37,8 @@ if __name__ == '__main__':
         param.requires_grad = False
 
     # 467
-    idx = 6370
+    idx = 961
+
     expect_idx = t_ds[idx][1]
     expect = t_ds.classes[expect_idx]
 
@@ -51,10 +49,7 @@ if __name__ == '__main__':
     p_max_index = p.argmax(dim=1)
     p_max = p[0, p_max_index]
     p_max.backward()
-    try:
-        pred = t_ds.classes[p_max_index[0]]
-    except Exception:
-        pred = "un"
+    pred = t_ds.classes[p_max_index[0]]
 
     saliency, _ = torch.max(img.grad.data.abs(), dim=1)
 
@@ -66,6 +61,7 @@ if __name__ == '__main__':
     axes[0].imshow(img[0].permute(1, 2, 0).detach().numpy())
     axes[0].title.set_text(f"act: {expect}")
     axes[1].imshow(saliency, cmap=plt.cm.hot)
+
     axes[1].title.set_text(f"pred: {pred}")
 
 

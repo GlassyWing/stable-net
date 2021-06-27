@@ -9,8 +9,13 @@ class StableNet(nn.Module):
 
         self.n_classes = n_classes
 
-        self.fe = models.resnet18(pretrained=pretrained)
-        self.fe.fc = nn.Linear(512, 512)
+        res = models.resnet18(pretrained=pretrained)
+        modules = [*res.children()]
+        self.backbone = nn.Sequential(*modules[:-2])
+        self.fc = nn.Sequential(nn.AdaptiveMaxPool2d(1),
+                                nn.Flatten(),
+                                nn.Linear(512, 512))
+        self.fe = nn.Sequential(self.backbone, self.fc)
         self.classifier = nn.Linear(512, self.n_classes)
 
     def forward(self, x, need_feat=False):
